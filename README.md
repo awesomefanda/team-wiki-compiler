@@ -18,10 +18,10 @@ This project takes a simpler approach: an LLM reads your raw source material and
 raw/                          wiki/
 ├── docs/arch-v2.md           ├── INDEX.md  ◄── master table of contents
 ├── rfcs/auth-redesign.md     ├── GLOSSARY.md
-├── runbooks/deploy.md    ──► ├── concepts/
-├── incidents/2026-03-15.md   │   ├── authentication.md
-├── jira/PROJ-1234.md         │   ├── deployment.md
-└── onboarding/day1.md        │   └── monitoring.md
+├── runbooks/deploy.md    ──► ├── MANIFEST.md  ◄── source→article map
+├── incidents/2026-03-15.md   ├── concepts/
+├── jira/PROJ-1234.md         │   ├── authentication.md
+└── onboarding/day1.md        │   └── deployment.md
                               └── guides/
         Human writes ──►          LLM compiles ──►  Team reads
 ```
@@ -54,12 +54,18 @@ EOF
 ### 3. Run the compiler
 
 ```bash
-./scripts/compile.sh
+./scripts/compile.sh                        # uses Claude (default)
+./scripts/compile.sh --provider ollama      # use a local model
+./scripts/compile.sh --provider groq        # use Groq (free tier)
 ```
 
 ### 4. Browse the wiki
 
-Open `wiki/INDEX.md` in any markdown viewer (Obsidian recommended), or read it on GitHub.
+```bash
+./scripts/search.sh "authentication"        # full-text search
+./scripts/search.sh --titles "deploy"       # title search
+open wiki/INDEX.md                          # or open in Obsidian
+```
 
 ## Project Structure
 
@@ -78,25 +84,38 @@ team-wiki-compiler/
 ├── wiki/                       # LLM-compiled output (auto-generated)
 │   ├── INDEX.md                #   Master table of contents
 │   ├── GLOSSARY.md             #   Team/project glossary
+│   ├── MANIFEST.md             #   Source→article map, orphans, backlinks
 │   ├── concepts/               #   Concept articles
 │   └── guides/                 #   How-to guides compiled from runbooks
 │
+├── personal/                   # Personal wikis (one per team member)
+│   └── <username>/
+│       ├── raw/                #   Personal raw notes
+│       ├── wiki/               #   Personal compiled wiki
+│       └── profile.md          #   Auto-generated expertise summary
+│
+├── providers/                  # LLM provider adapters (BYOAI)
+│   ├── claude.sh               #   Claude Code CLI
+│   ├── ollama.sh               #   Ollama (local models)
+│   ├── openai.sh               #   OpenAI API
+│   ├── groq.sh                 #   Groq API (free tier)
+│   └── README.md               #   How to add a new provider
+│
 ├── prompts/                    # LLM prompts (the "compiler instructions")
 │   ├── compile.md              #   Main compilation prompt
+│   ├── compile-personal.md     #   Personal wiki compilation prompt
 │   ├── lint.md                 #   Health check / linting prompt
 │   ├── query.md                #   Q&A prompt template
 │   └── ingest-jira.md          #   Jira-specific ingestion prompt
 │
 ├── scripts/                    # Automation scripts
-│   ├── compile.sh              #   Run the compiler
-│   └── lint.sh                 #   Run health checks
+│   ├── compile.sh              #   Run the compiler (team or personal)
+│   ├── lint.sh                 #   Run health checks
+│   ├── manifest.sh             #   Rebuild wiki/MANIFEST.md
+│   ├── search.sh               #   Search the wiki
+│   └── export.sh               #   Export wiki (html/obsidian/jsonl)
 │
-├── examples/                   # Example raw input → compiled output
-│   ├── raw/                    #   Sample raw documents
-│   └── wiki/                   #   What compiled output looks like
-│
-├── CONTRIBUTING.md             # How to contribute
-└── ARCHITECTURE.md             # Design decisions, trade-offs, scale path
+└── examples/                   # Example raw input → compiled output
 ```
 
 ## Key Concepts
@@ -116,11 +135,71 @@ The LLM doesn't reprocess everything from scratch. It reads `wiki/INDEX.md` to u
 
 Periodic LLM passes to find inconsistent info, stale content, missing cross-references, and candidates for new articles. Think `lint` for your knowledge base.
 
+```bash
+./scripts/lint.sh
+```
+
+## Personal Wikis
+
+Each team member can maintain a personal wiki alongside the team wiki. Personal wikis follow the same raw/ → wiki/ pattern but stay private.
+
+```bash
+# Set up your personal wiki
+mkdir -p personal/<your-username>/raw
+
+# Add personal notes
+cp ~/my-notes.md personal/<your-username>/raw/
+
+# Compile your personal wiki
+./scripts/compile.sh --personal <your-username>
+```
+
+The compiler auto-generates a `profile.md` summarizing your expertise, active projects, and interests — and cross-links to relevant team wiki articles.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for details on personal wiki setup and gitignore patterns.
+
+## BYOAI: Bring Your Own AI
+
+Prompts are LLM-agnostic. Switch providers with `--provider`:
+
+```bash
+./scripts/compile.sh --provider claude    # Claude Code CLI (default)
+./scripts/compile.sh --provider ollama    # local model via Ollama
+./scripts/compile.sh --provider openai    # GPT-4o (needs OPENAI_API_KEY)
+./scripts/compile.sh --provider groq      # Llama 3.3 via Groq (free tier, needs GROQ_API_KEY)
+```
+
+Each provider is a small shell script in `providers/`. Add your own by copying an existing one and implementing the two-argument interface. See [providers/README.md](providers/README.md).
+
+**Fine-tuning path:** Export the wiki as JSONL and fine-tune a local model on it. The model learns your team's knowledge in its weights.
+
+```bash
+./scripts/export.sh jsonl   # → export/wiki-finetune.jsonl
+```
+
+## Export & Portability
+
+Export the wiki in any format:
+
+```bash
+./scripts/export.sh html       # static HTML site (requires pandoc)
+./scripts/export.sh obsidian   # Obsidian vault with graph config
+./scripts/export.sh jsonl      # JSONL for fine-tuning
+```
+
+All exports go to `export/` by default. Use `--output <dir>` to change the destination.
+
+## Search
+
+```bash
+./scripts/search.sh "redis"              # full-text search
+./scripts/search.sh --titles "deploy"    # search titles only
+./scripts/search.sh --sources "PROJ-"    # find articles by Jira source
+```
+
 ## Adapting to Your Team
 
 **Add categories:** `mkdir raw/meeting-notes` and update `prompts/compile.md`.
-
-**Use any LLM:** Prompts are LLM-agnostic — Claude Code, Codex CLI, Ollama, or any OpenAI-compatible API.
 
 **Scale path:** Works up to ~500 articles / ~1M words. Beyond that, add full-text search, split into sub-wikis, or layer in RAG. See [ARCHITECTURE.md](ARCHITECTURE.md).
 

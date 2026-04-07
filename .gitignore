@@ -1,0 +1,22 @@
+wiki/_LINT_REPORT.md
+wiki/MANIFEST.md
+
+# Export artifacts (generated, not committed)
+export/
+
+# Personal wiki raw notes and compiled wiki (opt-in — commit profile.md only if desired)
+# To keep personal notes private, add to .git/info/exclude instead:
+#   personal/<username>/raw/
+#   personal/<username>/wiki/
+
+# Temp prompt files
+/tmp/compile-prompt.md
+/tmp/compile-personal-prompt.md
+
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
